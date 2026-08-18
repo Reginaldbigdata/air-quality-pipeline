@@ -14,6 +14,8 @@ load_dotenv()
 
 from app.core.database import Base
 from app.models.city import City  # noqa
+from app.models.raw_air_quality import RawAirQuality  # noqa
+from app.models.raw_weather import RawWeather  # noqa
 
 target_metadata = Base.metadata
 
