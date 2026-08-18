@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -17,3 +17,7 @@ class City(Base):
     timezone = Column(String(50), default="UTC")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("name", "country", name="uq_city_name_country"),
+    )
