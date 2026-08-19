@@ -21,7 +21,7 @@ def fetch_weather_for_city(city: City):
         "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,pressure_msl",
     }
 
-    response = requests.get(url, params=params, timeout=10)
+    response = requests.get(url, params=params, timeout=20)
     response.raise_for_status()
     data = response.json()["current"]
 
@@ -39,15 +39,24 @@ def run():
     db = SessionLocal()
     cities = db.query(City).filter(City.is_active == True).all()
 
+
     for city in cities:
         try:
             weather_data = fetch_weather_for_city(city)
+
+            already_exists = db.query(RawWeather).filter(
+                RawWeather.city_id == city.id,
+                RawWeather.recorded_at == weather_data["recorded_at"],
+            ).first()
+
+            if already_exists:
+                print(f"⏭️  {city.name}: already have this weather reading")
+                continue
 
             reading = RawWeather(city_id=city.id, **weather_data)
             db.add(reading)
             db.commit()
             print(f"✅ {city.name}: {weather_data['temperature']}°C, wind {weather_data['wind_speed']} km/h")
-
         except Exception as e:
             db.rollback()
             print(f"❌ Failed for {city.name}: {e}")
