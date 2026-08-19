@@ -22,9 +22,9 @@ STALE_THRESHOLD_DAYS = 7  # ignore stations that haven't reported recently
 
 
 def find_candidate_locations(lat, lon):
-    """Find nearby OpenAQ monitoring locations, most recently active first."""
+    """Find nearby OpenAQ monitoring locations (25km is OpenAQ's max allowed radius)."""
     url = "https://api.openaq.org/v3/locations"
-    params = {"coordinates": f"{lat},{lon}", "radius": 25000, "limit": 10}
+    params = {"coordinates": f"{lat},{lon}", "radius": 25000, "limit": 20}
     response = requests.get(url, headers=HEADERS, params=params, timeout=10)
     response.raise_for_status()
     return response.json()["results"]
@@ -51,10 +51,8 @@ def fetch_latest_for_location(location_id):
     return response.json()["results"]
 
 
-def pick_active_location(candidates):
-    """From nearby candidates, pick one with recent data (skip dead stations)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_THRESHOLD_DAYS)
-
+def pick_active_location(candidates, max_stale_days):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_stale_days)
     for loc in candidates:
         last_updated_str = loc.get("datetimeLast", {}).get("utc") if loc.get("datetimeLast") else None
         if not last_updated_str:
@@ -76,9 +74,16 @@ def run():
                 print(f"⚠️  No OpenAQ stations found near {city.name}")
                 continue
 
-            location = pick_active_location(candidates)
+            location = None
+            for max_stale_days in [7, 30, 90]:
+                location = pick_active_location(candidates, max_stale_days)
+                if location:
+                    if max_stale_days > 7:
+                        print(f"ℹ️  {city.name}: using a station last updated within {max_stale_days} days (none fresher found)")
+                    break
+
             if not location:
-                print(f"⚠️  No *actively reporting* station near {city.name} (found {len(candidates)}, all stale)")
+                print(f"⚠️  No station near {city.name} has reported in the last 90 days (found {len(candidates)} stations, all older)")
                 continue
 
             sensor_map = get_sensor_parameter_map(location["id"])
@@ -96,6 +101,18 @@ def run():
                 print(f"⚠️  Station found for {city.name} but no matching pollutants (pm25/pm10/no2/o3)")
                 continue
 
+            # Skip if we already have this exact reading (avoids noisy duplicate-key errors on re-run)
+            recorded_at_dt = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
+            already_exists = db.query(RawAirQuality).filter(
+                RawAirQuality.city_id == city.id,
+                RawAirQuality.source == "openaq",
+                RawAirQuality.recorded_at == recorded_at_dt,
+            ).first()
+
+            if already_exists:
+                print(f"⏭️  {city.name}: already have this reading (station hasn't updated since last run)")
+                continue
+
             entry = RawAirQuality(
                 city_id=city.id,
                 source="openaq",
@@ -103,7 +120,7 @@ def run():
                 pm10=values.get("pm10"),
                 no2=values.get("no2"),
                 o3=values.get("o3"),
-                recorded_at=datetime.fromisoformat(recorded_at.replace("Z", "+00:00")),
+                recorded_at=recorded_at_dt,
             )
             db.add(entry)
             db.commit()
