@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.air_quality import router as air_quality_router
 
 app = FastAPI(
     title="African Air Quality Early-Warning System",
     description="Descriptive, diagnostic, predictive, and prescriptive analytics for urban air quality across African cities.",
     version="0.1.0",
 )
+
+app.include_router(air_quality_router)
 
 # Allow our future frontend (plain HTML/JS) to call this API from the browser
 app.add_middleware(
