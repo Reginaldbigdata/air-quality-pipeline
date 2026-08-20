@@ -6,6 +6,7 @@ from app.api.air_quality import router as air_quality_router
 from app.api.weather import router as weather_router
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.api.diagnostics import router as diagnostics_router
+from app.api.cities import router as cities_router
 
 
 @asynccontextmanager
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(air_quality_router)
 app.include_router(weather_router)
 app.include_router(diagnostics_router)
+app.include_router(cities_router)
 
 
 @app.get("/")
